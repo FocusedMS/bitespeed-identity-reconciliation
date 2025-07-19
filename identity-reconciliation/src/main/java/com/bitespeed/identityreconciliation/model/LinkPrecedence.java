@@ -1,4 +1,4 @@
-package main.java.com.bitespeed.identityreconciliation.model;
+package com.bitespeed.identityreconciliation.model;
 
 public enum LinkPrecedence {
     PRIMARY,

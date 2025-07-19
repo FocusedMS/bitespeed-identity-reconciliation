@@ -1,4 +1,4 @@
-package main.java.com.bitespeed.identityreconciliation.controller;
+package com.bitespeed.identityreconciliation.controller;
 
 import com.bitespeed.identityreconciliation.service.ContactService;
 import lombok.RequiredArgsConstructor;
@@ -19,7 +19,9 @@ public class ContactController {
         String email = request.get("email");
         String phoneNumber = request.get("phoneNumber");
 
-        Map<String, Object> response = contactService.identifyOrLinkContact(email, phoneNumber);
+        Map<String, Object> contactResponse = contactService.identifyOrLinkContact(email, phoneNumber);
+        Map<String, Object> response = new java.util.HashMap<>();
+        response.put("contact", contactResponse);
         return ResponseEntity.ok(response);
     }
 }

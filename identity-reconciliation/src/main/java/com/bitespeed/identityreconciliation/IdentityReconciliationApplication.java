@@ -1,4 +1,4 @@
-package main.java.com.bitespeed.identityreconciliation;
+package com.bitespeed.identityreconciliation;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;

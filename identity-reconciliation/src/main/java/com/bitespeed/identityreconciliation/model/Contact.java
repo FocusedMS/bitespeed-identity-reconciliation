@@ -1,8 +1,11 @@
-package main.java.com.bitespeed.identityreconciliation.model;
+package com.bitespeed.identityreconciliation.model;
 
 import jakarta.persistence.*;
 import lombok.*;
 import java.time.LocalDateTime;
+
+
+
 
 @Entity
 @Data
@@ -17,7 +20,9 @@ public class Contact {
     private String phoneNumber;
     private String email;
     private String linkedId;
-    private String linkPrecedence;
+
+    @Enumerated(EnumType.STRING)
+    private LinkPrecedence linkPrecedence;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private LocalDateTime deletedAt;
