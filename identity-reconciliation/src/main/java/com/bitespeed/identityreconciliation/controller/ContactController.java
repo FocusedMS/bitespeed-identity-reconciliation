@@ -19,6 +19,10 @@ public class ContactController {
         String email = request.get("email");
         String phoneNumber = request.get("phoneNumber");
 
+        if ((email == null || email.trim().isEmpty()) && (phoneNumber == null || phoneNumber.trim().isEmpty())) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Either email or phoneNumber must be provided."));
+        }
+
         Map<String, Object> contactResponse = contactService.identifyOrLinkContact(email, phoneNumber);
         Map<String, Object> response = new java.util.HashMap<>();
         response.put("contact", contactResponse);
