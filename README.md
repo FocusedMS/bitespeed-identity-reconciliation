@@ -3,8 +3,48 @@
 ## Overview
 This project solves the Bitespeed identity reconciliation challenge for FluxKart.com. The goal is to link customer identities across multiple purchases, even when they use different emails or phone numbers, by maintaining a unified contact graph in a relational database.
 
-**Scenario:**
-Doc Brown (from Back to the Future) buys time machine parts from FluxKart.com using different emails and phone numbers. Bitespeed must reconcile these identities to provide a personalized experience.
+## Live API Endpoint
+
+The service is deployed and available at:
+
+**POST** https://bitespeed-identity-reconciliation-xi55.onrender.com/identify
+
+_You can use this endpoint in Postman, curl, or your frontend integration for live testing._
+
+---
+
+## Requirements
+- Expose a POST `/identify` endpoint that receives JSON:
+  ```json
+  {
+    "email": "string (optional)",
+    "phoneNumber": "string (optional)"
+  }
+  ```
+  - At least one of `email` or `phoneNumber` is required.
+- The service links contacts by matching email or phoneNumber, always consolidating under the oldest (primary) contact.
+- Returns a consolidated contact group:
+  ```json
+  {
+    "contact": {
+      "primaryContactId": number,
+      "emails": string[],
+      "phoneNumbers": string[],
+      "secondaryContactIds": number[]
+    }
+  }
+  ```
+- Idempotent: repeated requests with the same data do not create duplicates.
+- Robust: Handles all edge cases gracefully.
+
+---
+
+## Sequence Flow
+1. User sends request with email and/or phone number.
+2. Service checks for existing contacts by email or phone.
+3. If matches found, merges or links contacts as needed (oldest becomes primary).
+4. If no matches, creates a new primary contact.
+5. Returns the consolidated contact group in the response.
 
 ---
 
@@ -20,9 +60,9 @@ Doc Brown (from Back to the Future) buys time machine parts from FluxKart.com us
 
 ## Setup Instructions
 
-### 1. Clone the repository
+### 1. Clone the Repository
 ```sh
-git clone <repo-url>
+git clone https://github.com/<your-username>/bitespeed-identity-reconciliation.git
 cd bitespeed-identity-reconciliation/identity-reconciliation
 ```
 
@@ -56,11 +96,11 @@ Identify or link a contact based on email and/or phone number.
 #### Request Body
 ```json
 {
-  "email": "doc@future.com",
-  "phoneNumber": "9999999999"
+  "email": "doc@future.com", // optional
+  "phoneNumber": "9999999999" // optional
 }
 ```
-- At least one of `email` or `phoneNumber` must be provided.
+- At least one of `email` or `phoneNumber` is required.
 
 #### Response Body
 ```json
@@ -74,13 +114,21 @@ Identify or link a contact based on email and/or phone number.
 }
 ```
 - `primaryContactId`: The oldest (primary) contact ID in the group.
-- `emails`: All unique emails linked to this identity.
-- `phoneNumbers`: All unique phone numbers linked to this identity.
+- `emails`: All unique emails linked to this identity (primary's email first).
+- `phoneNumbers`: All unique phone numbers linked to this identity (primary's phone first).
 - `secondaryContactIds`: All secondary contact IDs in the group.
+
+#### Example 400 Bad Request
+If both fields are missing or empty:
+```json
+{
+  "error": "Either email or phoneNumber must be provided."
+}
+```
 
 #### Example cURL
 ```sh
-curl -X POST http://localhost:8080/identify \
+curl -X POST https://bitespeed-identity-reconciliation-xi55.onrender.com/identify \
   -H 'Content-Type: application/json' \
   -d '{"email": "doc@future.com", "phoneNumber": "9999999999"}'
 ```
@@ -90,18 +138,43 @@ curl -X POST http://localhost:8080/identify \
 ## Data Model
 
 ### Contact Table
-| Field           | Type      | Description                                      |
-|-----------------|-----------|--------------------------------------------------|
-| id              | bigint    | Primary key, auto-increment                      |
-| phoneNumber     | varchar   | Phone number (nullable)                          |
-| email           | varchar   | Email address (nullable)                         |
-| linkedId        | varchar   | ID of another Contact (if secondary)             |
-| linkPrecedence  | enum      | 'PRIMARY' or 'SECONDARY'                         |
-| createdAt       | datetime  | Creation timestamp                               |
-| updatedAt       | datetime  | Last update timestamp                            |
-| deletedAt       | datetime  | Soft delete timestamp (nullable)                 |
+| Field           | Type                        | Description                                                      |
+|-----------------|-----------------------------|------------------------------------------------------------------|
+| ID              | bigint                      | Primary Key, Auto-Increment                                      |
+| PhoneNumber     | varchar                     | Phone Number (nullable)                                          |
+| Email           | varchar                     | Email Address (nullable)                                         |
+| LinkedId        | varchar                     | ID of another Contact (if secondary)                             |
+| LinkPrecedence  | enum ('PRIMARY', 'SECONDARY') | Indicates whether this contact is the master record or linked to one |
+| CreatedAt       | datetime                    | Creation Timestamp                                               |
+| UpdatedAt       | datetime                    | Last Update Timestamp                                            |
+| DeletedAt       | datetime                    | Soft Delete Timestamp (nullable)                                 |
 
 - The oldest contact in a group is PRIMARY; others are SECONDARY and linked via `linkedId`.
+
+---
+
+## Test Cases
+
+| #  | Name/Scenario                        | Request Example | Expected Behavior |
+|----|--------------------------------------|-----------------|------------------|
+| 1  | New Contact (No Match)               | `{ "email": "jon.snow@winterfell.com", "phoneNumber": "9000000001" }` | Creates new primary |
+| 2  | Match by Email                       | `{ "email": "jon.snow@winterfell.com", "phoneNumber": "9000000002" }` | Creates secondary, links to primary |
+| 3  | Match by Phone                       | `{ "email": "arya.stark@winterfell.com", "phoneNumber": "9000000002" }` | Creates secondary, links to primary |
+| 4  | Full Overlap (Already Exists)        | `{ "email": "jon.snow@winterfell.com", "phoneNumber": "9000000002" }` | No duplicate, returns consolidated group |
+| 5  | Multiple Secondary Links             | `{ "email": "daenerys.targaryen@dragonstone.com", "phoneNumber": "9000000002" }` | Adds new secondary, consolidates all |
+| 6  | Only Email Provided                  | `{ "email": "tyrion.lannister@casterlyrock.com" }` | Creates new primary or returns consolidated group |
+| 7  | Only Phone Provided                  | `{ "phoneNumber": "9000000003" }` | Creates new primary or returns consolidated group |
+| 8  | Null Email and Phone                 | `{ "email": null, "phoneNumber": null }` | 400 Bad Request |
+| 9  | Same Phone, Different Emails         | `{ "email": "sansa.stark@winterfell.com", "phoneNumber": "9000000003" }` | Adds email to group |
+| 10 | Duplicate Entry of Same Person       | `{ "email": "daenerys.targaryen@dragonstone.com", "phoneNumber": "9000000002" }` | No duplicate, returns same primary |
+
+---
+
+## Deployment (Render)
+- The app can be deployed to [Render](https://render.com/) with PostgreSQL.
+- On push to the main branch, Render auto-builds and redeploys.
+- Set environment variables for DB connection as needed.
+- See logs in the Render dashboard for deploy status.
 
 ---
 
@@ -119,6 +192,7 @@ curl -X POST http://localhost:8080/identify \
 - The application is production-ready for PostgreSQL.
 - For any issues, check database connectivity and credentials in `application.properties`.
 - The `/identify` endpoint is idempotent and safe to call multiple times for the same input.
+- If both `email` and `phoneNumber` are missing or empty, the API returns 400 Bad Request (robustness beyond spec).
 
 ---
 
